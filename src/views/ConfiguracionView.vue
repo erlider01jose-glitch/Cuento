@@ -5,9 +5,11 @@ import { useFinanzas, formatearMonto } from '../composables/useFinanzas'
 const {
   tasas,
   tasaActual,
+  tasaOficialActual,
   perfil,
   actualizarPerfil,
   registrarTasa,
+  obtenerTasaDesdeAPI,
   restaurarDeFabrica,
   exportarDatos,
   importarDatos,
@@ -37,7 +39,9 @@ function guardarPerfil() {
 
 // --- Tasa de cambio ---
 const nuevaTasa = ref('')
+const tipoTasaManual = ref('paralelo') // 'paralelo' | 'oficial'
 const mensajeTasa = ref('')
+const cargandoTasa = ref(false)
 
 function guardarTasa() {
   const valor = Number(nuevaTasa.value)
@@ -45,14 +49,34 @@ function guardarTasa() {
     mensajeTasa.value = 'Ingresá un valor válido (ej: 130.00).'
     return
   }
-  registrarTasa({ fecha: new Date().toISOString().slice(0, 10), valor })
-  mensajeTasa.value = '✓ Tasa guardada.'
+  registrarTasa({ fecha: new Date().toISOString().slice(0, 10), valor, tipo: tipoTasaManual.value })
+  mensajeTasa.value = `✓ Tasa ${tipoTasaManual.value === 'paralelo' ? 'paralela' : 'oficial'} guardada.`
   nuevaTasa.value = ''
 }
 
-// computed: el historial ordenado del más reciente al más viejo —
-// así la persona ve primero la tasa de hoy y puede revisar hacia atrás.
-const historial = computed(() => [...tasas.value].sort((a, b) => b.fecha.localeCompare(a.fecha)))
+async function traerTasaDesdeAPI() {
+  cargandoTasa.value = true
+  mensajeTasa.value = ''
+  try {
+    const { paralelo, oficial } = await obtenerTasaDesdeAPI()
+    const partes = []
+    if (paralelo) partes.push(`Paralela: ${paralelo.toFixed(2)} Bs`)
+    if (oficial) partes.push(`Oficial: ${oficial.toFixed(2)} Bs`)
+    mensajeTasa.value = `✓ ${partes.join(' · ')}`
+  } catch {
+    mensajeTasa.value = '✗ No se pudo conectar con la API. Revisá tu internet.'
+  } finally {
+    cargandoTasa.value = false
+  }
+}
+
+// historial ordenado del más reciente al más viejo, separado por tipo.
+const historialParalelo = computed(() =>
+  tasas.value.filter((t) => t.tipo === 'paralelo').sort((a, b) => b.fecha.localeCompare(a.fecha))
+)
+const historialOficial = computed(() =>
+  tasas.value.filter((t) => t.tipo === 'oficial').sort((a, b) => b.fecha.localeCompare(a.fecha))
+)
 
 // --- Importar / exportar datos ---
 // "inputArchivo" no guarda un dato sino una REFERENCIA al <input> oculto
@@ -122,33 +146,99 @@ function restaurar() {
 
     <section class="bloque">
       <h3>Tasa de cambio (USD → Bs)</h3>
-      <p v-if="tasaActual" class="tasa-actual">
-        1 USD = {{ formatearMonto(tasaActual.valor, 'VES') }}
-        <span class="fecha-tasa">· cargada el {{ tasaActual.fecha }}</span>
-      </p>
-      <p v-else class="tasa-actual sin-cargar">Todavía no cargaste ninguna tasa.</p>
 
+      <!-- Tasas actuales -->
+      <div class="tasas-actuales">
+        <div class="tasa-chip">
+          <span class="tasa-etiqueta">Paralela (Binance)</span>
+          <span v-if="tasaActual" class="tasa-valor">
+            {{ formatearMonto(tasaActual.valor, 'VES') }}
+            <small>· {{ tasaActual.fecha }}</small>
+          </span>
+          <span v-else class="tasa-valor sin-cargar">Sin datos</span>
+        </div>
+        <div class="tasa-chip">
+          <span class="tasa-etiqueta">Oficial (BCV)</span>
+          <span v-if="tasaOficialActual" class="tasa-valor">
+            {{ formatearMonto(tasaOficialActual.valor, 'VES') }}
+            <small>· {{ tasaOficialActual.fecha }}</small>
+          </span>
+          <span v-else class="tasa-valor sin-cargar">Sin datos</span>
+        </div>
+      </div>
+
+      <!-- Obtener desde API -->
+      <button class="exportar" :disabled="cargandoTasa" @click="traerTasaDesdeAPI">
+        {{ cargandoTasa ? 'Consultando...' : '⟳ Actualizar desde Binance / BCV' }}
+      </button>
+
+      <!-- Tasa manual -->
+      <p class="ayuda" style="margin-top: 12px">O ingresala a mano:</p>
+      <div class="tipo-tasa">
+        <label :class="['tipo-opcion', { activa: tipoTasaManual === 'paralelo' }]">
+          <input v-model="tipoTasaManual" type="radio" value="paralelo" /> Paralela
+        </label>
+        <label :class="['tipo-opcion', { activa: tipoTasaManual === 'oficial' }]">
+          <input v-model="tipoTasaManual" type="radio" value="oficial" /> Oficial (BCV)
+        </label>
+      </div>
       <form class="form-tasa" @submit.prevent="guardarTasa">
         <input
           type="number"
           v-model="nuevaTasa"
           min="0"
           step="0.01"
-          placeholder="Ej: 130.00"
+          :placeholder="tipoTasaManual === 'paralelo' ? 'Ej: 762.78' : 'Ej: 563.29'"
         />
-        <button type="submit">Guardar tasa de hoy</button>
+        <button type="submit">Guardar</button>
       </form>
-      <p class="ayuda">
-        Por ahora se carga a mano; la idea es que más adelante la app la traiga sola desde una API.
-      </p>
+
       <p v-if="mensajeTasa" class="mensaje-tasa">{{ mensajeTasa }}</p>
 
-      <details v-if="historial.length > 0" class="historial">
-        <summary>Ver historial de tasas ({{ historial.length }})</summary>
+      <!-- Auto-actualización -->
+      <div class="auto-update">
+        <label class="auto-update-toggle">
+          <input
+            type="checkbox"
+            :checked="perfil.autoActualizarTasa"
+            @change="actualizarPerfil({ autoActualizarTasa: $event.target.checked })"
+          />
+          Actualizar tasa automáticamente al abrir la app
+        </label>
+        <div v-if="perfil.autoActualizarTasa" class="auto-update-intervalo">
+          <span class="ayuda">Frecuencia:</span>
+          <select
+            :value="perfil.intervaloActualizacion"
+            @change="actualizarPerfil({ intervaloActualizacion: $event.target.value })"
+          >
+            <option value="siempre">Cada vez que abro la app</option>
+            <option value="horario">Como máximo cada hora</option>
+            <option value="diario">Como máximo una vez al día</option>
+          </select>
+        </div>
+        <p v-if="perfil.ultimaActualizacionTasa" class="ayuda">
+          Última actualización automática:
+          {{ new Date(perfil.ultimaActualizacionTasa).toLocaleString('es-VE') }}
+        </p>
+      </div>
+
+      <!-- Historiales -->
+      <details v-if="historialParalelo.length > 0" class="historial">
+        <summary>Historial paralela ({{ historialParalelo.length }})</summary>
         <ul>
-          <li v-for="t in historial" :key="t.fecha">
+          <li v-for="t in historialParalelo" :key="t.fecha + t.tipo">
             <span>{{ t.fecha }}</span>
-            <span>1 USD = {{ formatearMonto(t.valor, 'VES') }}</span>
+            <span>{{ formatearMonto(t.valor, 'VES') }}</span>
+            <span class="origen">{{ t.origen === 'manual' ? 'manual' : 'API' }}</span>
+          </li>
+        </ul>
+      </details>
+      <details v-if="historialOficial.length > 0" class="historial">
+        <summary>Historial oficial BCV ({{ historialOficial.length }})</summary>
+        <ul>
+          <li v-for="t in historialOficial" :key="t.fecha + t.tipo">
+            <span>{{ t.fecha }}</span>
+            <span>{{ formatearMonto(t.valor, 'VES') }}</span>
             <span class="origen">{{ t.origen === 'manual' ? 'manual' : 'API' }}</span>
           </li>
         </ul>
@@ -288,6 +378,115 @@ function restaurar() {
 
 .oculto {
   display: none;
+}
+
+.tasas-actuales {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tasa-chip {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tasa-etiqueta {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.tasa-valor {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tasa-valor.sin-cargar {
+  font-weight: 400;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.tasa-valor small {
+  font-weight: 400;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.tipo-tasa {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tipo-opcion {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.tipo-opcion.activa {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tipo-opcion input[type="radio"] {
+  accent-color: var(--accent);
+}
+
+.auto-update {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auto-update-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.auto-update-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.auto-update-intervalo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.auto-update-intervalo select {
+  flex: 1;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  background: var(--bg);
+  color: var(--text);
 }
 
 .tasa-actual {

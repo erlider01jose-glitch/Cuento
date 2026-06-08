@@ -110,8 +110,17 @@ function cargarDatosIniciales() {
         if (!c.moneda) c.moneda = 'USD'
       })
       datos.tasas ??= []
+      // Migración: entradas anteriores sin "tipo" se asignan a 'paralelo'
+      // (que era el único tipo que existía antes de esta versión).
+      datos.tasas.forEach((t) => { t.tipo ??= 'paralelo' })
       datos.monedaReferencia ??= 'USD'
-      datos.perfil ??= { nombre: '', apellido: '', fechaNacimiento: '' }
+      datos.perfil ??= {}
+      datos.perfil.nombre ??= ''
+      datos.perfil.apellido ??= ''
+      datos.perfil.fechaNacimiento ??= ''
+      datos.perfil.autoActualizarTasa ??= false
+      datos.perfil.intervaloActualizacion ??= 'diario'
+      datos.perfil.ultimaActualizacionTasa ??= null
       datos.cuentasPorCobrar ??= []
       datos.papelera ??= []
       return datos
@@ -139,12 +148,17 @@ function datosDeFabrica() {
       { id: 2, nombre: 'Efectivo', tipo: 'activo', moneda: 'VES', saldo: 0 },
     ],
     movimientos: [],
-    tasas: [], // historial de tasas de cambio: { fecha, valor, origen }
+    tasas: [], // historial: { fecha, valor, tipo: 'paralelo'|'oficial', origen: 'manual'|'api' }
     monedaReferencia: 'USD', // moneda en la que se muestran los totales combinados
     // Datos personales opcionales que se piden en el asistente de
     // bienvenida. No los usa ningún cálculo — es solo para que la app
     // se sienta "tuya" (por ejemplo, podríamos saludar "Hola, José").
-    perfil: { nombre: '', apellido: '', fechaNacimiento: '' },
+    perfil: {
+      nombre: '', apellido: '', fechaNacimiento: '',
+      autoActualizarTasa: false,
+      intervaloActualizacion: 'diario', // 'siempre' | 'horario' | 'diario'
+      ultimaActualizacionTasa: null,
+    },
     // Dinero que te deben: trabajos sin cobrar y préstamos otorgados.
     // Ver agregarCuentaPorCobrar/registrarAbono para la forma exacta
     // de cada elemento — vacío de fábrica, igual que movimientos.
@@ -223,9 +237,9 @@ watch(
 // importa para convertir movimientos de fechas pasadas correctamente,
 // algo clave en un país con inflación donde la tasa de hoy no sirve
 // para convertir algo de hace tres meses).
-function buscarTasaPara(fecha) {
+function buscarTasaPara(fecha, tipo = 'paralelo') {
   const candidatas = tasas.value
-    .filter((t) => t.fecha <= fecha)
+    .filter((t) => t.fecha <= fecha && t.tipo === tipo)
     .sort((a, b) => b.fecha.localeCompare(a.fecha))
   return candidatas[0] ?? null
 }
@@ -250,7 +264,8 @@ export function useFinanzas() {
   // la app obtiene "la tasa actual": el día de mañana, cuando se
   // conecte una API que la traiga sola, alcanza con cambiar esta
   // función (o agregar una fuente más) sin tocar nada del resto de la app.
-  const tasaActual = computed(() => buscarTasaPara(hoyISO()))
+  const tasaActual = computed(() => buscarTasaPara(hoyISO(), 'paralelo'))
+  const tasaOficialActual = computed(() => buscarTasaPara(hoyISO(), 'oficial'))
 
   // ¿Hace falta una tasa para mostrar los totales combinados, pero no
   // hay ninguna cargada? (varias monedas en juego + sin tasa = no se
@@ -329,20 +344,56 @@ export function useFinanzas() {
   // movimiento para mostrar "la tasa de ese día" (no la de hoy — en
   // un país con inflación, la tasa cambia, y lo que importa para
   // entender un gasto viejo es la que regía cuando ocurrió).
-  function tasaParaFecha(fecha) {
-    return buscarTasaPara(fecha)
+  function tasaParaFecha(fecha, tipo = 'paralelo') {
+    return buscarTasaPara(fecha, tipo)
   }
 
   // Carga (o corrige) la tasa de un día puntual. Si ya existía una
   // para esa fecha, la reemplaza — así podés corregir un error de
   // tipeo sin terminar con dos tasas para el mismo día.
-  function registrarTasa({ fecha, valor }) {
-    const existente = tasas.value.find((t) => t.fecha === fecha)
+  function registrarTasa({ fecha, valor, tipo = 'paralelo', origen = 'manual' }) {
+    const existente = tasas.value.find((t) => t.fecha === fecha && t.tipo === tipo)
     if (existente) {
       existente.valor = valor
-      existente.origen = 'manual'
+      existente.origen = origen
     } else {
-      tasas.value.push({ fecha, valor, origen: 'manual' })
+      tasas.value.push({ fecha, valor, tipo, origen })
+    }
+  }
+
+  // Consulta la API pública ve.dolarapi.com y registra automáticamente
+  // tanto la tasa paralela (Binance P2P promedio) como la oficial (BCV).
+  // Retorna { paralelo, oficial } con los valores guardados.
+  async function obtenerTasaDesdeAPI() {
+    const res = await fetch('https://ve.dolarapi.com/v1/dolares')
+    if (!res.ok) throw new Error(`Error de red: ${res.status}`)
+    const lista = await res.json()
+
+    const hoy = hoyISO()
+    const datosParalelo = lista.find((t) => t.fuente === 'paralelo')
+    const datosOficial = lista.find((t) => t.fuente === 'oficial')
+
+    if (datosParalelo?.promedio) registrarTasa({ fecha: hoy, valor: datosParalelo.promedio, tipo: 'paralelo', origen: 'api' })
+    if (datosOficial?.promedio) registrarTasa({ fecha: hoy, valor: datosOficial.promedio, tipo: 'oficial', origen: 'api' })
+
+    actualizarPerfil({ ultimaActualizacionTasa: Date.now() })
+
+    return { paralelo: datosParalelo?.promedio ?? null, oficial: datosOficial?.promedio ?? null }
+  }
+
+  // Llamada desde App.vue al montar: actualiza las tasas automáticamente
+  // si el usuario lo tiene habilitado Y el intervalo configurado ya pasó.
+  async function autoActualizarSiCorresponde() {
+    if (!perfil.value.autoActualizarTasa) return
+    const ahora = Date.now()
+    const ultima = perfil.value.ultimaActualizacionTasa ?? 0
+    const intervalos = { siempre: 0, horario: 3_600_000, diario: 86_400_000 }
+    const intervaloMs = intervalos[perfil.value.intervaloActualizacion] ?? intervalos.diario
+    if (ahora - ultima < intervaloMs) return
+    try {
+      await obtenerTasaDesdeAPI()
+    } catch {
+      // Error silencioso: si la API falla al abrir la app, no la bloqueamos.
     }
   }
 
@@ -602,6 +653,7 @@ export function useFinanzas() {
     movimientos,
     tasas,
     tasaActual,
+    tasaOficialActual,
     monedaReferencia,
     perfil,
     monedasEnUso,
@@ -614,6 +666,8 @@ export function useFinanzas() {
     cambiarMonedaReferencia,
     actualizarPerfil,
     registrarTasa,
+    obtenerTasaDesdeAPI,
+    autoActualizarSiCorresponde,
     tasaParaFecha,
     agregarCuenta,
     agregarMovimiento,

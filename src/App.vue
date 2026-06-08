@@ -4,7 +4,7 @@
 // componentes importados) queda disponible automáticamente en el <template>
 // de abajo, sin tener que "exportarlo" a mano.
 
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import ResumenView from './views/ResumenView.vue'
 import MovimientoForm from './views/MovimientoForm.vue'
 import MovimientosList from './views/MovimientosList.vue'
@@ -20,7 +20,11 @@ import { useFinanzas } from './composables/useFinanzas'
 // se usa directo "vistaActual" (Vue se encarga de "desenvolverla").
 const vistaActual = ref('resumen')
 
-const { cuentas, movimientos } = useFinanzas()
+const { cuentas, movimientos, autoActualizarSiCorresponde } = useFinanzas()
+
+// Al montar la app: si el usuario tiene activada la actualización automática
+// de tasas y ya pasó el intervalo configurado, trae la tasa desde la API.
+onMounted(autoActualizarSiCorresponde)
 
 // "En blanco" = la persona todavía no hizo nada más allá de lo que
 // la app trae de fábrica (las dos cuentas "Efectivo" y ningún
