@@ -17,6 +17,9 @@
   --border: #e2e5ea;
   --radius: 10px;
   --ganancia-bg: #eaf1fa;
+  --chip-bg: #eef1f4;
+  --aviso-bg: #fdf3e0;
+  --peligro-bg: #fbeae6;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -33,6 +36,9 @@
     --expense: #f0a030;
     --border: #2d3139;
     --ganancia-bg: rgba(88, 166, 255, 0.12);
+    --chip-bg: rgba(255, 255, 255, 0.07);
+    --aviso-bg: rgba(240, 160, 48, 0.1);
+    --peligro-bg: rgba(212, 107, 90, 0.1);
   }
 }
 

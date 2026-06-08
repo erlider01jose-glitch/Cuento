@@ -121,6 +121,7 @@ function cargarDatosIniciales() {
       datos.perfil.intervaloActualizacion ??= 'diario'
       datos.perfil.ultimaActualizacionTasa ??= null
       datos.cuentasPorCobrar ??= []
+      datos.fondos ??= []
       datos.papelera ??= []
       return datos
     } catch {
@@ -162,6 +163,9 @@ function datosDeFabrica() {
     // Ver agregarCuentaPorCobrar/registrarAbono para la forma exacta
     // de cada elemento — vacío de fábrica, igual que movimientos.
     cuentasPorCobrar: [],
+    // Sobres de presupuesto: cada fondo acumula una parte de los ingresos
+    // según el porcentaje configurado. El saldo se guarda en monedaReferencia.
+    fondos: [],
     // Movimientos eliminados recientemente: cada uno guarda sus datos
     // originales tal cual (para poder restaurarlo) más "eliminadoEl"
     // (cuándo se borró). Ver eliminarMovimiento/restaurarDePapelera.
@@ -194,6 +198,7 @@ const tasas = ref(datosIniciales.tasas)
 const monedaReferencia = ref(datosIniciales.monedaReferencia)
 const perfil = ref(datosIniciales.perfil)
 const cuentasPorCobrar = ref(datosIniciales.cuentasPorCobrar)
+const fondos = ref(datosIniciales.fondos ?? [])
 // purgarPapelera() se aplica ACÁ, al armar el ref inicial — así, apenas
 // se abre la app, ya no carga en memoria nada vencido (y el próximo
 // guardado en localStorage sale "limpio" sin que haga falta tocar nada más).
@@ -202,6 +207,7 @@ const papelera = ref(purgarPapelera(datosIniciales.papelera))
 let siguienteIdCuenta = Math.max(0, ...cuentas.value.map((c) => c.id)) + 1
 let siguienteIdMovimiento = Math.max(0, ...movimientos.value.map((m) => m.id)) + 1
 let siguienteIdCuentaPorCobrar = Math.max(0, ...cuentasPorCobrar.value.map((c) => c.id)) + 1
+let siguienteIdFondo = Math.max(0, ...fondos.value.map((f) => f.id)) + 1
 // Los abonos viven dentro de cada "cuenta por cobrar" (no son una
 // colección aparte), así que su contador de IDs recorre todos los
 // abonos de todas ellas para no repetir un id entre dos cuentas.
@@ -213,7 +219,7 @@ let siguienteIdAbono =
 // array entero fue reemplazado), vuelve a guardar todo en localStorage.
 // Así nunca hay que acordarse de "guardar a mano".
 watch(
-  [cuentas, movimientos, tasas, monedaReferencia, perfil, cuentasPorCobrar, papelera],
+  [cuentas, movimientos, tasas, monedaReferencia, perfil, cuentasPorCobrar, fondos, papelera],
   () => {
     localStorage.setItem(
       CLAVE_ALMACENAMIENTO,
@@ -224,6 +230,7 @@ watch(
         monedaReferencia: monedaReferencia.value,
         perfil: perfil.value,
         cuentasPorCobrar: cuentasPorCobrar.value,
+        fondos: fondos.value,
         papelera: papelera.value,
       })
     )
@@ -416,13 +423,43 @@ export function useFinanzas() {
       nota, // texto libre y opcional — detalle que el detalle del movimiento muestra
     })
 
-    // Ajustamos el saldo de la cuenta afectada: un ingreso lo suma, un gasto lo resta.
-    // El monto queda automáticamente en la moneda de esa cuenta — no
-    // hace falta convertir nada al cargar un movimiento.
     const cuenta = cuentas.value.find((c) => c.id === cuentaId)
     if (cuenta) {
       cuenta.saldo += tipo === 'ingreso' ? monto : -monto
     }
+
+    // Cuando es un ingreso, distribuimos automáticamente a los fondos activos.
+    // Convertimos el monto a monedaReferencia para que todos los fondos
+    // acumulen en la misma unidad sin importar en qué cuenta entró el dinero.
+    if (tipo === 'ingreso' && fondos.value.length > 0 && cuenta) {
+      const enRef = convertir(monto, cuenta.moneda, monedaReferencia.value, fecha) ?? 0
+      for (const fondo of fondos.value) {
+        fondo.saldo += enRef * fondo.porcentaje / 100
+      }
+    }
+  }
+
+  // Agrega un nuevo fondo (sobre de presupuesto). El porcentaje puede ser
+  // 0 si el usuario quiere crearlo sin asignación todavía.
+  function agregarFondo({ nombre, porcentaje, color }) {
+    fondos.value.push({ id: siguienteIdFondo++, nombre, porcentaje: Number(porcentaje), color, saldo: 0 })
+  }
+
+  function editarFondo(id, cambios) {
+    const fondo = fondos.value.find((f) => f.id === id)
+    if (fondo) Object.assign(fondo, cambios)
+  }
+
+  function eliminarFondo(id) {
+    const i = fondos.value.findIndex((f) => f.id === id)
+    if (i !== -1) fondos.value.splice(i, 1)
+  }
+
+  // Descuenta monto del saldo de un fondo (en monedaReferencia).
+  // Se llama cuando el usuario vincula un gasto a un fondo.
+  function usarFondo(id, monto) {
+    const fondo = fondos.value.find((f) => f.id === id)
+    if (fondo) fondo.saldo = Math.max(0, fondo.saldo - monto)
   }
 
   function eliminarMovimiento(id) {
@@ -639,12 +676,14 @@ export function useFinanzas() {
     monedaReferencia.value = datos.monedaReferencia
     perfil.value = datos.perfil
     cuentasPorCobrar.value = datos.cuentasPorCobrar
+    fondos.value = datos.fondos
     papelera.value = datos.papelera
     siguienteIdCuenta = Math.max(0, ...cuentas.value.map((c) => c.id)) + 1
     siguienteIdMovimiento = Math.max(0, ...movimientos.value.map((m) => m.id)) + 1
     siguienteIdCuentaPorCobrar = Math.max(0, ...cuentasPorCobrar.value.map((c) => c.id)) + 1
     siguienteIdAbono =
       Math.max(0, ...cuentasPorCobrar.value.flatMap((c) => c.abonos.map((a) => a.id))) + 1
+    siguienteIdFondo = Math.max(0, ...fondos.value.map((f) => f.id)) + 1
   }
 
   return {
@@ -678,6 +717,11 @@ export function useFinanzas() {
     montoPendiente,
     agregarCuentaPorCobrar,
     registrarAbono,
+    fondos,
+    agregarFondo,
+    editarFondo,
+    eliminarFondo,
+    usarFondo,
     restaurarDeFabrica,
     exportarDatos,
     importarDatos,

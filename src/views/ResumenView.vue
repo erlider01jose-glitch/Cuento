@@ -271,7 +271,7 @@ function alternarMonedaReferencia() {
 
 <style scoped>
 .aviso {
-  background: #fdf3e0;
+  background: var(--aviso-bg);
   border: 1px solid var(--expense);
   color: var(--expense);
   border-radius: var(--radius);
@@ -447,7 +447,7 @@ function alternarMonedaReferencia() {
   font-size: 0.7rem;
   font-weight: 600;
   color: var(--muted);
-  background: #eef1f4;
+  background: var(--chip-bg);
   border-radius: 999px;
   padding: 2px 7px;
 }
@@ -456,7 +456,7 @@ function alternarMonedaReferencia() {
   font-size: 0.72rem;
   padding: 2px 8px;
   border-radius: 999px;
-  background: #eef1f4;
+  background: var(--chip-bg);
   color: var(--muted);
 }
 

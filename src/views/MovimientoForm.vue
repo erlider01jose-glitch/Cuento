@@ -8,7 +8,13 @@ import {
   formatearMonto,
 } from '../composables/useFinanzas'
 
-const { cuentas, agregarMovimiento } = useFinanzas()
+const { cuentas, agregarMovimiento, fondos, monedaReferencia, convertir, usarFondo } = useFinanzas()
+
+// Fondo opcional que el usuario elige para vincular el gasto
+const fondoSeleccionadoId = ref(null)
+
+// Solo mostramos fondos con saldo > 0 en el selector
+const fondosConSaldo = computed(() => fondos.value.filter((f) => f.saldo > 0.001))
 
 // reactive() es como ref(), pero pensado para AGRUPAR varios campos
 // relacionados en un solo objeto. La diferencia práctica: con reactive
@@ -92,11 +98,22 @@ function cancelarAdvertencia() {
 
 function guardar(datos) {
   agregarMovimiento(datos)
+
+  // Si el usuario vinculó el gasto a un fondo, descontamos de él.
+  if (datos.tipo === 'gasto' && fondoSeleccionadoId.value) {
+    const cuenta = cuentas.value.find((c) => c.id === datos.cuentaId)
+    if (cuenta) {
+      const enRef = convertir(datos.monto, cuenta.moneda, monedaReferencia.value, datos.fecha) ?? datos.monto
+      usarFondo(Number(fondoSeleccionadoId.value), enRef)
+    }
+  }
+
   advertencia.value = null
   mensaje.value = '✓ Movimiento guardado.'
   form.categoria = ''
   form.monto = null
   form.nota = ''
+  fondoSeleccionadoId.value = null
 }
 </script>
 
@@ -184,6 +201,29 @@ function guardar(datos) {
       de confirmación. Así obligamos a una decisión explícita: "Guardar
       igual" o "Revisar" — nunca se guarda en silencio.
     -->
+    <!-- Panel de fondos: solo aparece en gastos y si hay fondos configurados -->
+    <div v-if="form.tipo === 'gasto' && fondos.length > 0" class="panel-fondos">
+      <p class="panel-fondos-titulo">Fondos disponibles</p>
+      <ul class="fondos-lista">
+        <li v-for="f in fondos" :key="f.id" class="fondo-item">
+          <span class="fondo-punto" :style="{ background: f.color }"></span>
+          <span class="fondo-label">{{ f.nombre }}</span>
+          <span class="fondo-disponible" :class="f.saldo < 0.01 ? 'sin-saldo' : ''">
+            {{ formatearMonto(f.saldo, monedaReferencia) }}
+          </span>
+        </li>
+      </ul>
+      <label class="campo campo-fondo" v-if="fondosConSaldo.length > 0">
+        Descontar de un fondo <span class="opcional">(opcional)</span>
+        <select v-model="fondoSeleccionadoId">
+          <option :value="null">— No descontar de ningún fondo</option>
+          <option v-for="f in fondosConSaldo" :key="f.id" :value="f.id">
+            {{ f.nombre }} · {{ formatearMonto(f.saldo, monedaReferencia) }} disponible
+          </option>
+        </select>
+      </label>
+    </div>
+
     <button v-if="!advertencia" type="submit" class="guardar">Guardar movimiento</button>
 
     <div v-else class="advertencia">
@@ -292,7 +332,7 @@ function guardar(datos) {
 
 .advertencia {
   border: 1px solid var(--liability);
-  background: #fbeae6;
+  background: var(--peligro-bg);
   border-radius: var(--radius);
   padding: 14px;
   display: flex;
@@ -335,5 +375,67 @@ function guardar(datos) {
   text-align: center;
   font-size: 0.9rem;
   color: var(--accent);
+}
+
+/* ── Panel de fondos ── */
+.panel-fondos {
+  background: var(--bg);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panel-fondos-titulo {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.fondos-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fondo-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.85rem;
+}
+
+.fondo-punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.fondo-label {
+  flex: 1;
+  color: var(--text);
+}
+
+.fondo-disponible {
+  font-weight: 600;
+  color: var(--income);
+  font-variant-numeric: tabular-nums;
+}
+
+.fondo-disponible.sin-saldo {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.campo-fondo select {
+  width: 100%;
 }
 </style>

@@ -13,6 +13,11 @@ const {
   restaurarDeFabrica,
   exportarDatos,
   importarDatos,
+  monedaReferencia,
+  fondos,
+  agregarFondo,
+  editarFondo,
+  eliminarFondo,
 } = useFinanzas()
 
 // --- Perfil ---
@@ -102,6 +107,38 @@ async function manejarArchivoSeleccionado(evento) {
   }
   // Limpiamos el input para poder volver a elegir el mismo archivo si hace falta.
   evento.target.value = ''
+}
+
+// --- Fondos ---
+const COLORES_FONDO = ['#2b6cb0', '#2f6f4f', '#a3432f', '#8a5a00', '#6b46c1', '#c05621']
+
+const nuevoFondo = reactive({ nombre: '', porcentaje: 10, color: COLORES_FONDO[0] })
+const mostrarFormFondo = ref(false)
+const fondoEditandoId = ref(null)
+const fondoEditandoPorcentaje = ref(0)
+
+const porcentajeTotal = computed(() =>
+  fondos.value.reduce((s, f) => s + f.porcentaje, 0)
+)
+const porcentajeLibre = computed(() => Math.max(0, 100 - porcentajeTotal.value))
+
+function guardarFondo() {
+  if (!nuevoFondo.nombre.trim() || nuevoFondo.porcentaje <= 0) return
+  agregarFondo({ nombre: nuevoFondo.nombre.trim(), porcentaje: nuevoFondo.porcentaje, color: nuevoFondo.color })
+  nuevoFondo.nombre = ''
+  nuevoFondo.porcentaje = 10
+  nuevoFondo.color = COLORES_FONDO[0]
+  mostrarFormFondo.value = false
+}
+
+function iniciarEdicion(fondo) {
+  fondoEditandoId.value = fondo.id
+  fondoEditandoPorcentaje.value = fondo.porcentaje
+}
+
+function guardarEdicion(fondo) {
+  editarFondo(fondo.id, { porcentaje: Number(fondoEditandoPorcentaje.value) })
+  fondoEditandoId.value = null
 }
 
 // --- Restaurar valores de fábrica ---
@@ -243,6 +280,100 @@ function restaurar() {
           </li>
         </ul>
       </details>
+    </section>
+
+    <!-- ─── Fondos ──────────────────────────────────────────────────── -->
+    <section class="bloque">
+      <h3>Fondos de presupuesto</h3>
+      <p class="ayuda" style="margin-top:0">
+        Cada ingreso que registrés se distribuye automáticamente según estos porcentajes.
+        El resto ({{ porcentajeLibre }}%) queda libre en tu cuenta sin etiqueta.
+      </p>
+
+      <!-- Barra visual de distribución -->
+      <div class="barra-fondos" aria-label="Distribución de porcentajes">
+        <div
+          v-for="fondo in fondos"
+          :key="fondo.id"
+          class="barra-segmento"
+          :style="{ width: fondo.porcentaje + '%', background: fondo.color }"
+          :title="`${fondo.nombre}: ${fondo.porcentaje}%`"
+        ></div>
+        <div
+          v-if="porcentajeLibre > 0"
+          class="barra-segmento barra-libre"
+          :style="{ width: porcentajeLibre + '%' }"
+          title="Libre (sin fondo)"
+        ></div>
+      </div>
+      <p v-if="porcentajeTotal > 100" class="mensaje-tasa" style="color: var(--expense)">
+        ⚠ Los porcentajes suman {{ porcentajeTotal }}% — superan el 100%.
+      </p>
+
+      <!-- Lista de fondos existentes -->
+      <ul class="lista-fondos">
+        <li v-for="fondo in fondos" :key="fondo.id" class="item-fondo">
+          <span class="fondo-dot" :style="{ background: fondo.color }"></span>
+          <span class="fondo-nombre">{{ fondo.nombre }}</span>
+          <template v-if="fondoEditandoId === fondo.id">
+            <input
+              type="number"
+              v-model="fondoEditandoPorcentaje"
+              min="0"
+              max="100"
+              class="fondo-input-pct"
+            />
+            <span class="fondo-pct-label">%</span>
+            <button class="fondo-btn fondo-btn-ok" @click="guardarEdicion(fondo)">✓</button>
+            <button class="fondo-btn fondo-btn-cancel" @click="fondoEditandoId = null">✕</button>
+          </template>
+          <template v-else>
+            <span class="fondo-pct">{{ fondo.porcentaje }}%</span>
+            <span class="fondo-saldo">{{ formatearMonto(fondo.saldo, monedaReferencia) }}</span>
+            <button class="fondo-btn" @click="iniciarEdicion(fondo)" title="Editar %">✎</button>
+            <button class="fondo-btn fondo-btn-del" @click="eliminarFondo(fondo.id)" title="Eliminar">✕</button>
+          </template>
+        </li>
+        <li v-if="fondos.length === 0" class="fondo-vacio">
+          Todavía no creaste ningún fondo.
+        </li>
+      </ul>
+
+      <!-- Formulario nuevo fondo -->
+      <div v-if="mostrarFormFondo" class="form-fondo">
+        <input
+          v-model="nuevoFondo.nombre"
+          type="text"
+          placeholder="Nombre del fondo (ej: Ahorro)"
+          class="fondo-input-nombre"
+        />
+        <div class="fila-fondo">
+          <input
+            type="number"
+            v-model="nuevoFondo.porcentaje"
+            min="1"
+            max="100"
+            class="fondo-input-pct"
+          />
+          <span class="fondo-pct-label">%</span>
+          <div class="fondo-colores">
+            <button
+              v-for="color in COLORES_FONDO"
+              :key="color"
+              type="button"
+              class="color-opcion"
+              :class="{ seleccionado: nuevoFondo.color === color }"
+              :style="{ background: color }"
+              @click="nuevoFondo.color = color"
+            ></button>
+          </div>
+        </div>
+        <div class="acciones-fondo">
+          <button class="fondo-btn-cancel-full" @click="mostrarFormFondo = false">Cancelar</button>
+          <button class="fondo-btn-guardar" @click="guardarFondo">Guardar fondo</button>
+        </div>
+      </div>
+      <button v-else class="boton-nuevo-fondo" @click="mostrarFormFondo = true">+ Nuevo fondo</button>
     </section>
 
     <section class="bloque">
@@ -604,7 +735,7 @@ function restaurar() {
 .confirmacion {
   margin-top: 4px;
   border: 1px solid var(--liability);
-  background: #fbeae6;
+  background: var(--peligro-bg);
   border-radius: var(--radius);
   padding: 14px;
   display: flex;
@@ -640,5 +771,202 @@ function restaurar() {
 .confirmar-peligro {
   background: var(--liability);
   color: #fff;
+}
+
+/* ── Fondos ── */
+.barra-fondos {
+  display: flex;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg);
+  margin-bottom: 14px;
+  gap: 2px;
+}
+
+.barra-segmento {
+  border-radius: 999px;
+  transition: width 0.3s ease;
+  min-width: 4px;
+}
+
+.barra-libre {
+  background: var(--border);
+}
+
+.lista-fondos {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.item-fondo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+}
+
+.fondo-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.fondo-nombre {
+  flex: 1;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.fondo-pct {
+  font-weight: 600;
+  color: var(--muted);
+  min-width: 32px;
+  text-align: right;
+}
+
+.fondo-saldo {
+  font-weight: 600;
+  color: var(--income);
+  min-width: 60px;
+  text-align: right;
+  font-size: 0.8rem;
+}
+
+.fondo-input-pct {
+  width: 52px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  text-align: center;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.fondo-pct-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.fondo-vacio {
+  font-size: 0.82rem;
+  color: var(--muted);
+  text-align: center;
+  padding: 8px 0;
+}
+
+.fondo-btn {
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.fondo-btn-ok { color: var(--asset); border-color: var(--asset); }
+.fondo-btn-cancel { color: var(--liability); border-color: var(--liability); }
+.fondo-btn-del { color: var(--liability); }
+.fondo-btn-del:hover { background: var(--liability); color: #fff; }
+
+.form-fondo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+}
+
+.fondo-input-nombre {
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.92rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.fila-fondo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fondo-colores {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.color-opcion {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s;
+}
+
+.color-opcion.seleccionado {
+  border-color: var(--text);
+  transform: scale(1.25);
+}
+
+.acciones-fondo {
+  display: flex;
+  gap: 8px;
+}
+
+.fondo-btn-cancel-full {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.fondo-btn-guardar {
+  flex: 2;
+  padding: 8px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.fondo-btn-guardar:hover { background: var(--accent-dark); }
+
+.boton-nuevo-fondo {
+  width: 100%;
+  padding: 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.boton-nuevo-fondo:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 </style>
