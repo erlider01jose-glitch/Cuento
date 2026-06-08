@@ -12,6 +12,7 @@ import ConfiguracionView from './views/ConfiguracionView.vue'
 import CuentasPorCobrarView from './views/CuentasPorCobrarView.vue'
 import EstadisticasView from './views/EstadisticasView.vue'
 import AsistenteInicial from './components/AsistenteInicial.vue'
+import TasaWidget from './components/TasaWidget.vue'
 import { useFinanzas } from './composables/useFinanzas'
 
 // ref() crea una variable "reactiva": cuando su valor cambia, Vue
@@ -136,6 +137,7 @@ const pestañas = [
     sin importar en qué pestaña estés parado.
   -->
   <AsistenteInicial v-if="mostrarAsistente" @cerrar="cerrarAsistente" />
+  <TasaWidget />
 </template>
 
 <style scoped>
