@@ -1,0 +1,39 @@
+/*
+  Estilos globales: variables de color y reseteos básicos que va a usar
+  toda la app. Cada componente .vue puede además tener su propio bloque
+  <style scoped> para sus estilos particulares (ver App.vue).
+*/
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --text: #1f2733;
+  --muted: #5b6573;
+  --accent: #2f6f4f;
+  --accent-dark: #28593f;
+  --asset: #2f6f4f;
+  --liability: #a3432f;
+  --income: #2b6cb0;
+  --expense: #8a5a00;
+  --border: #e2e5ea;
+  --radius: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+h1, h2, h3 {
+  margin: 0 0 8px;
+}
+
+button {
+  font-family: inherit;
+}
