@@ -87,11 +87,10 @@ export const SIMBOLOS_MONEDA = { USD: '$', VES: 'Bs' }
 export function formatearMonto(monto, moneda) {
   const simbolo = SIMBOLOS_MONEDA[moneda] ?? ''
   const signo = monto < 0 ? '-' : ''
-  const numero = Math.abs(monto).toLocaleString('es-VE', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-  return `${signo}${simbolo} ${numero}`
+  const [entero, decimal] = Math.abs(monto).toFixed(2).split('.')
+  // Separador de miles con punto, decimal con coma (formato venezolano: 5.000,00)
+  const miles = entero.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return `${signo}${simbolo} ${miles},${decimal}`
 }
 
 function hoyISO() {

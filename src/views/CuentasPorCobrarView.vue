@@ -443,7 +443,7 @@ function registrarCobro(cxc) {
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--income);
-  background: #eaf1fa;
+  background: var(--ganancia-bg);
   border-radius: 999px;
   padding: 2px 8px;
 }
@@ -495,10 +495,13 @@ function registrarCobro(cxc) {
   gap: 6px;
   font-size: 0.85rem;
   color: var(--muted);
+  min-width: 0;
 }
 
 .campo-cuenta input,
 .campo-cuenta select {
+  width: 100%;
+  min-width: 0;
   padding: 10px;
   border-radius: var(--radius);
   border: 1px solid var(--border);

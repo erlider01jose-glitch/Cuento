@@ -16,6 +16,24 @@
   --expense: #8a5a00;
   --border: #e2e5ea;
   --radius: 10px;
+  --ganancia-bg: #eaf1fa;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d24;
+    --text: #e8eaed;
+    --muted: #8b949e;
+    --accent: #3a8a63;
+    --accent-dark: #2f6f4f;
+    --asset: #3fb76e;
+    --liability: #d46b5a;
+    --income: #58a6ff;
+    --expense: #f0a030;
+    --border: #2d3139;
+    --ganancia-bg: rgba(88, 166, 255, 0.12);
+  }
 }
 
 * {
