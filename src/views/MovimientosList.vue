@@ -9,8 +9,6 @@ const {
   papelera,
   restaurarDePapelera,
   eliminarDePapeleraDefinitivamente,
-  exportarDatos,
-  importarDatos,
   tasaParaFecha,
 } = useFinanzas()
 
@@ -56,13 +54,6 @@ const papeleraOrdenada = computed(() =>
 function tasaDelMomento(mov) {
   return tasaParaFecha(mov.fecha)
 }
-
-// Esta vez ref() no guarda un dato, sino una REFERENCIA a un elemento
-// del HTML. Al escribir ref="inputArchivo" en el <input> de abajo, Vue
-// conecta automáticamente ese elemento con esta variable — así podemos
-// "clickearlo" desde código (ver abrirSelectorDeArchivo).
-const inputArchivo = ref(null)
-const mensaje = ref('')
 
 // "ahora" es un reloj reactivo: lo actualizamos cada segundo, y como
 // formatearMomento() lo lee, Vue vuelve a calcular el texto ("hace 8
@@ -161,30 +152,11 @@ function formatearMontoMovimiento(mov) {
   return formatearMonto(mov.monto, c?.moneda ?? 'USD')
 }
 
-function abrirSelectorDeArchivo() {
-  inputArchivo.value.click()
-}
-
-async function manejarArchivoSeleccionado(evento) {
-  const archivo = evento.target.files[0]
-  if (!archivo) return
-
-  try {
-    await importarDatos(archivo)
-    mensaje.value = '✓ Datos importados correctamente.'
-  } catch {
-    mensaje.value = '✗ El archivo no tiene un formato válido.'
-  }
-  // Limpiamos el input para poder volver a elegir el mismo archivo si hace falta.
-  evento.target.value = ''
-}
 </script>
 
 <template>
   <div class="movimientos">
     <div class="acciones">
-      <button class="accion" @click="exportarDatos">⬇ Exportar datos (.json)</button>
-      <button class="accion" @click="abrirSelectorDeArchivo">⬆ Importar datos</button>
       <!--
         El ícono de papelera abre/cierra la sección de abajo. La
         "insignia" roja con el conteo solo aparece si hay algo adentro
@@ -195,25 +167,7 @@ async function manejarArchivoSeleccionado(evento) {
         🗑 Papelera
         <span v-if="papelera.length > 0" class="insignia">{{ papelera.length }}</span>
       </button>
-      <!--
-        Input de archivo oculto con CSS (ver .oculto): lo disparamos
-        por código con inputArchivo.value.click(), así podemos mostrar
-        un botón con nuestro propio estilo en vez del feo selector nativo.
-        @change se dispara cuando el usuario elige un archivo.
-      -->
-      <input
-        ref="inputArchivo"
-        type="file"
-        accept="application/json"
-        class="oculto"
-        @change="manejarArchivoSeleccionado"
-      />
     </div>
-    <p v-if="mensaje" class="mensaje">{{ mensaje }}</p>
-    <p class="ayuda">
-      Exportar guarda un archivo .json con todo lo cargado — es tu respaldo y lo que
-      permitirá migrar a otra base de datos el día de mañana sin perder nada.
-    </p>
 
     <!--
       Sección plegable: arranca oculta y se abre/cierra con el botón
@@ -335,10 +289,6 @@ async function manejarArchivoSeleccionado(evento) {
   color: var(--accent);
 }
 
-.oculto {
-  display: none;
-}
-
 /*
   El botón de la papelera necesita "position: relative" para que la
   insignia (".insignia", con "position: absolute") se ubique relativa
@@ -369,13 +319,6 @@ async function manejarArchivoSeleccionado(evento) {
   font-weight: 600;
   line-height: 18px;
   text-align: center;
-}
-
-.mensaje {
-  text-align: center;
-  font-size: 0.9rem;
-  color: var(--accent);
-  margin: 4px 0;
 }
 
 .ayuda {

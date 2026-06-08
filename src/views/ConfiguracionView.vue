@@ -10,6 +10,7 @@ const {
   registrarTasa,
   restaurarDeFabrica,
   exportarDatos,
+  importarDatos,
 } = useFinanzas()
 
 // --- Perfil ---
@@ -52,6 +53,32 @@ function guardarTasa() {
 // computed: el historial ordenado del más reciente al más viejo —
 // así la persona ve primero la tasa de hoy y puede revisar hacia atrás.
 const historial = computed(() => [...tasas.value].sort((a, b) => b.fecha.localeCompare(a.fecha)))
+
+// --- Importar / exportar datos ---
+// "inputArchivo" no guarda un dato sino una REFERENCIA al <input> oculto
+// de abajo (ver ref="inputArchivo"). Así podemos "clickearlo" desde
+// código (abrirSelectorDeArchivo) y mostrar nuestro propio botón en vez
+// del feo selector nativo.
+const inputArchivo = ref(null)
+const mensajeDatos = ref('')
+
+function abrirSelectorDeArchivo() {
+  inputArchivo.value.click()
+}
+
+async function manejarArchivoSeleccionado(evento) {
+  const archivo = evento.target.files[0]
+  if (!archivo) return
+
+  try {
+    await importarDatos(archivo)
+    mensajeDatos.value = '✓ Datos importados correctamente.'
+  } catch {
+    mensajeDatos.value = '✗ El archivo no tiene un formato válido.'
+  }
+  // Limpiamos el input para poder volver a elegir el mismo archivo si hace falta.
+  evento.target.value = ''
+}
 
 // --- Restaurar valores de fábrica ---
 // Mismo patrón que la advertencia de saldo negativo en el formulario
@@ -131,11 +158,29 @@ function restaurar() {
     <section class="bloque">
       <h3>Tus datos</h3>
       <p class="ayuda" style="margin-top: 0">
-        Descargá un archivo .json con todo lo cargado — billeteras, movimientos, tasas y
-        más. Es tu respaldo y lo que te va a permitir migrar a otra base de datos el día
-        de mañana sin perder nada.
+        Exportar guarda un archivo .json con todo lo cargado — billeteras, movimientos,
+        tasas y más. Es tu respaldo y lo que te va a permitir migrar a otra base de datos
+        el día de mañana sin perder nada. Importar hace lo contrario: reemplaza lo
+        cargado por el contenido de un archivo .json exportado antes.
       </p>
-      <button class="exportar" @click="exportarDatos">⬇ Exportar datos (.json)</button>
+      <div class="acciones-datos">
+        <button class="exportar" @click="exportarDatos">⬇ Exportar datos (.json)</button>
+        <button class="exportar" @click="abrirSelectorDeArchivo">⬆ Importar datos</button>
+      </div>
+      <!--
+        Input de archivo oculto con CSS (ver .oculto): lo disparamos por
+        código con inputArchivo.value.click(), así podemos mostrar un botón
+        con nuestro propio estilo en vez del feo selector nativo. @change
+        se dispara cuando el usuario elige un archivo.
+      -->
+      <input
+        ref="inputArchivo"
+        type="file"
+        accept="application/json"
+        class="oculto"
+        @change="manejarArchivoSeleccionado"
+      />
+      <p v-if="mensajeDatos" class="mensaje-tasa">{{ mensajeDatos }}</p>
     </section>
 
     <section class="bloque peligro">
@@ -219,10 +264,15 @@ function restaurar() {
   background: var(--accent-dark);
 }
 
-.exportar {
+.acciones-datos {
+  display: flex;
+  gap: 8px;
   margin-top: 4px;
+}
+
+.exportar {
+  flex: 1;
   padding: 10px;
-  width: 100%;
   border: 1px solid var(--accent);
   border-radius: var(--radius);
   background: transparent;
@@ -234,6 +284,10 @@ function restaurar() {
 .exportar:hover {
   background: var(--accent);
   color: #fff;
+}
+
+.oculto {
+  display: none;
 }
 
 .tasa-actual {
