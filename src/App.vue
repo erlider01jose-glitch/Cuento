@@ -10,6 +10,7 @@ import MovimientoForm from './views/MovimientoForm.vue'
 import MovimientosList from './views/MovimientosList.vue'
 import ConfiguracionView from './views/ConfiguracionView.vue'
 import CuentasPorCobrarView from './views/CuentasPorCobrarView.vue'
+import EstadisticasView from './views/EstadisticasView.vue'
 import AsistenteInicial from './components/AsistenteInicial.vue'
 import { useFinanzas } from './composables/useFinanzas'
 
@@ -64,8 +65,9 @@ function cerrarAsistente() {
 
 const pestañas = [
   { id: 'resumen', etiqueta: 'Resumen' },
-  { id: 'nuevo', etiqueta: 'Nuevo movimiento' },
+  { id: 'nuevo', etiqueta: 'Nuevo' },
   { id: 'movimientos', etiqueta: 'Movimientos' },
+  { id: 'estadisticas', etiqueta: 'Estadísticas' },
 ]
 </script>
 
@@ -122,6 +124,7 @@ const pestañas = [
       <MovimientosList v-else-if="vistaActual === 'movimientos'" />
       <ConfiguracionView v-else-if="vistaActual === 'configuracion'" />
       <CuentasPorCobrarView v-else-if="vistaActual === 'porcobrar'" />
+      <EstadisticasView v-else-if="vistaActual === 'estadisticas'" />
     </main>
   </div>
 
